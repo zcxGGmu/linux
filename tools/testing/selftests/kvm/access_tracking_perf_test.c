@@ -47,6 +47,7 @@
 #include "memstress.h"
 #include "guest_modes.h"
 #include "processor.h"
+#include "ucall_common.h"
 
 /* Global variable used to synchronize all of the vCPU threads. */
 static int iteration;

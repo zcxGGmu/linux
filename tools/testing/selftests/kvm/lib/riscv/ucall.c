@@ -7,6 +7,7 @@
 
 #include <linux/kvm.h>
 
+#include "riscv/sbi.h"
 #include "kvm_util.h"
 #include "processor.h"
 
