@@ -326,8 +326,12 @@ void do_trap_ecall_u(struct pt_regs *regs)
 
 		add_random_kstack_offset();
 
-		if (syscall >= 0 && syscall < NR_syscalls)
+		if (syscall >= 0 && syscall < NR_syscalls) {
+			if (regs->a0 != regs->orig_a0)
+				regs->orig_a0 = regs->a0;
 			syscall_handler(regs, syscall);
+		}
+
 		else if (syscall != -1)
 			regs->a0 = -ENOSYS;
 		/*
