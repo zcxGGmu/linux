@@ -60,7 +60,7 @@ static int child(int fd)
     return 0;
 }
 
-int main(int argc, void **argv)
+int main(int argc, char **argv)
 {
     struct user_regs_struct regs;
     struct iovec iov = {
@@ -74,11 +74,11 @@ int main(int argc, void **argv)
     ksft_set_plan(3);
 
     if (pipe(p))
-        return pr_error("Can't create a pipe");
+        return pr_perror("Can't create a pipe");
 
     fdzero = open("/dev/zero", O_RDONLY);
     if (fdzero < 0)
-        return pr_error("Can't open /dev/zero");
+        return pr_perror("Can't open /dev/zero");
 
     pid = fork();
     if (pid == 0) {
@@ -89,9 +89,9 @@ int main(int argc, void **argv)
         return 1;
 
     if (ptrace(PTRACE_ATTACH, pid, 0, 0))
-        return pr_error("Can't attach to the child %d", pid);
+        return pr_perror("Can't attach to the child %d", pid);
     if (waitpid(pid, &status, 0) != pid)
-        return pr_error("Can't wait for the child %d", pid);
+        return pr_perror("Can't wait for the child %d", pid);
 
     /* Skip SIGSTOP */
     if (ptrace_and_wait(pid, PTRACE_CONT, SIGSTOP))
@@ -112,7 +112,7 @@ int main(int argc, void **argv)
 		return pr_perror("Can't get child registers");
     if (regs.orig_a0 != p[0])
         return pr_fail("Unexpected a0: 0x%lx", regs.orig_a0);
-    ksft_test_result_pass("orig_a0: 0x%llx\n", regs.orig_a0);
+    ksft_test_result_pass("orig_a0: 0x%lx\n", regs.orig_a0);
 
     /* Change orig_a0 that will be a0 for the restarted system call. */
     regs.orig_a0 = fdzero;
@@ -132,7 +132,7 @@ int main(int argc, void **argv)
         return pr_perror("Can't get child registers");
     if (regs.a0 != fdzero)
         return pr_fail("unexpected a0: %lx", regs.a0);
-    ksft_test_result_pass("a0: 0x%llx\n", regs.a0);
+    ksft_test_result_pass("a0: 0x%lx\n", regs.a0);
 
     if (ptrace(PTRACE_CONT, pid, 0, 0))
         return pr_perror("Can't resume the child %d", pid);

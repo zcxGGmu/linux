@@ -4,9 +4,9 @@
 
 CFLAGS += -I$(top_srcdir)/tools/include
 
-TEST_GEN_PROGS := abi
+TEST_GEN_PROGS := ptrace_restart_syscall
 
 include ../../lib.mk
 
-$(OUTPUT)/sigreturn: ptrace_restart_syscall.c
+$(OUTPUT)/ptrace_restart_syscall: ptrace_restart_syscall.c
 	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
