@@ -4,9 +4,12 @@
 
 CFLAGS += -I$(top_srcdir)/tools/include
 
-TEST_GEN_PROGS := ptrace_restart_syscall
+TEST_GEN_PROGS := ptrace_restart_syscall_v0 ptrace_restart_syscall_v1
 
 include ../../lib.mk
 
-$(OUTPUT)/ptrace_restart_syscall: ptrace_restart_syscall.c
+$(OUTPUT)/ptrace_restart_syscall_v0: ptrace_restart_syscall_v0.c
+	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
+
+$(OUTPUT)/ptrace_restart_syscall_v1: ptrace_restart_syscall_v1.c
 	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
