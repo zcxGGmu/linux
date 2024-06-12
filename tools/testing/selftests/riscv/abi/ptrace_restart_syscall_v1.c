@@ -83,15 +83,26 @@ static int ptrace_restart_syscall_test(int opt)
 
     pid = fork();
     if (pid == 0) {
+        /*
         if (ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
             perror("request for tracer to trace me failed");
             return -1;
         }
+        */
 
         kill(getpid(), SIGSTOP);
         return tracee(p[0]);
     } else if (pid < 0)
         return 1;
+
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0)) {
+        ksft_test_result_error("failed to attach to the tracee %d\n", pid);
+        return -1;
+    }
+    if (waitpid(pid, &status, 0) != pid) {
+        ksft_test_result_error("failed to wait for the tracee %d\n", pid);
+        return -1;
+    }
 
     /* Skip SIGSTOP */
     if (ptrace_and_wait(pid, PTRACE_CONT, SIGSTOP))

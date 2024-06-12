@@ -76,16 +76,27 @@ int main(int argc, char **argv)
 
     pid = fork();
     if (pid == 0) {
+        /*
         if (ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
             ksft_test_result_error("failed to establish a tracing relationship\n");
             return -1;
         }
+        */
 
         kill(getpid(), SIGSTOP);
         return tracee(fd_null);
     }
     if (pid < 0)
         return 1;
+
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0)) {
+        ksft_test_result_error("failed to attach to the tracee %d\n", pid);
+        return -1;
+    }
+    if (waitpid(pid, &status, 0) != pid) {
+        ksft_test_result_error("failed to wait for the child %d\n", pid);
+        return -1;
+    }
 
     /* Skip SIGSTOP */
     if (ptrace_and_wait(pid, PTRACE_CONT, SIGSTOP))
@@ -108,7 +119,7 @@ int main(int argc, char **argv)
         return -1;
     }
     if (regs.orig_a0 != fd_null) {
-        ksft_test_result_fail("unexpected a0: 0x%lx\n", regs.orig_a0);
+        ksft_test_result_fail("unexpected orig_a0: 0x%lx\n", regs.orig_a0);
         return -1;
     }
     ksft_test_result_pass("orig_a0: 0x%lx\n", regs.orig_a0);
@@ -133,11 +144,11 @@ int main(int argc, char **argv)
         ksft_test_result_error("failed to get tracee registers\n");
         return -1;
     }
-    if (regs.orig_a0 != fd_zero) {
-        ksft_test_result_fail("unexpected a0: 0x%lx\n", regs.orig_a0);
+    if (regs.a0 != fd_zero) {
+        ksft_test_result_fail("unexpected regs.a0: 0x%lx\n", regs.a0);
         return -1;
     }
-    ksft_test_result_pass("orig_a0: 0x%lx\n", regs.orig_a0);
+    ksft_test_result_pass("a0: 0x%lx\n", regs.a0);
 
     /* Check exit status of the tracee */
     if (ptrace(PTRACE_CONT, pid, 0, 0)) {

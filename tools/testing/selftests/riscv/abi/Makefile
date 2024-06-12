@@ -4,8 +4,7 @@
 
 CFLAGS += -I$(top_srcdir)/tools/include
 
-TEST_GEN_PROGS := ptrace_restart_syscall_v0 ptrace_restart_syscall_v1 ptrace_restart_syscall_v2
-
+TEST_GEN_PROGS := ptrace_restart_syscall_v0 ptrace_restart_syscall_v1 ptrace_restart_syscall_v2 ptrace_restart_syscall_v0_fd_null
 include ../../lib.mk
 
 $(OUTPUT)/ptrace_restart_syscall_v0: ptrace_restart_syscall_v0.c
@@ -14,5 +13,8 @@ $(OUTPUT)/ptrace_restart_syscall_v0: ptrace_restart_syscall_v0.c
 $(OUTPUT)/ptrace_restart_syscall_v1: ptrace_restart_syscall_v1.c
 	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
 
-$(OUTPUT)/ptrace_restart_syscall_v1: ptrace_restart_syscall_v1.c ptrace_restart_syscall_v2.c
-$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
+$(OUTPUT)/ptrace_restart_syscall_v2: ptrace_restart_syscall_v2.c
+	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
+
+$(OUTPUT)/ptrace_restart_syscall_v0_fd_null: ptrace_restart_syscall_v0_fd_null.c
+	$(CC) -static -o$@ $(CFLAGS) $(LDFLAGS) $^
