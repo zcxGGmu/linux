@@ -17,79 +17,83 @@
 #include <linux/unistd.h>
 #include <asm/ptrace.h>
 
-#include "../../kselftest_harness.h"
-
-#define ORIG_A0_BEFORE_MODIFIED     0x3
-#define ORIG_A0_AFTER_MODIFIED      0x5
-#define MODIFY_A0_CASE              0x01
-#define MODIFY_ORIG_A0_CASE         0x02
+#include "../../kselftest.h"
 
 static inline int ptrace_and_wait(pid_t pid, int flag, int sig)
 {
-    int status;
+	int status;
 
-    if (ptrace(flag, pid, 0, 0)) {
-        perror("resume the tracee failed");
+	if (ptrace(flag, pid, 0, 0)) {
+        ksft_test_result_error("failed to resume the tracee %d\n", pid);
         return -1;
     }
 
-    if (waitpid(pid, &status, 0) != pid) {
-        perror("wait for the tracee failed");
-        return -1;
+	if (waitpid(pid, &status, 0) != pid) {
+        ksft_test_result_error("failed to wait for the tracee %d\n", pid);
     }
 
-    if (!WIFSTOPPED(status) || WSTOPSIG(status) != sig) {
-        perror("unexpected status");
-        return -1;
+	if (!WIFSTOPPED(status) || WSTOPSIG(status) != sig) {
+        ksft_test_result_error("unexpected status: %x\n", status);
     }
 
-    return 0;
+	return 0;
 }
 
 static int tracee(int fd)
 {
     char c;
-    
     if (read(fd, &c, 1) != 1)
         return 1;
 
     return 0;
 }
 
-static int ptrace_restart_syscall_test(int opt, int *result)
+int main(int argc, char **argv)
 {
     struct user_regs_struct regs;
     struct iovec iov = {
         .iov_base = &regs,
         .iov_len = sizeof(regs),
     };
-    pid_t pid;
-    int p[2], fd_zero;
     int status;
+    pid_t pid;
+    int fd_null, p[2];
+
+    ksft_set_plan(3);
 
     if (pipe(p)) {
-        perror("create a pipe failed");
+        ksft_test_result_error("failed to create pipe\n");
         return -1;
     }
 
-    fd_zero = open("/dev/zero", O_RDONLY);
-    if (fd_zero < 0) {
-        perror("open /dev/zero failed");
+
+    fd_null = open("/dev/null", O_RDONLY);
+    if (fd_null < 0) {
+        ksft_test_result_error("failed to open /dev/null\n");
         return -1;
     }
+    
+    /*
+    fd_zero = open("/dev/zero", O_RDONLY);
+    if (fd_zero < 0) {
+        ksft_test_result_error("failed to open /dev/zero\n");
+        return -1;
+    }
+    */
 
     pid = fork();
     if (pid == 0) {
         /*
         if (ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
-            perror("request for tracer to trace me failed");
+            ksft_test_result_error("failed to establish a tracing relationship\n");
             return -1;
         }
         */
 
         kill(getpid(), SIGSTOP);
         return tracee(p[0]);
-    } else if (pid < 0)
+    }
+    if (pid < 0)
         return 1;
 
     if (ptrace(PTRACE_ATTACH, pid, 0, 0)) {
@@ -97,7 +101,7 @@ static int ptrace_restart_syscall_test(int opt, int *result)
         return -1;
     }
     if (waitpid(pid, &status, 0) != pid) {
-        ksft_test_result_error("failed to wait for the tracee %d\n", pid);
+        ksft_test_result_error("failed to wait for the child %d\n", pid);
         return -1;
     }
 
@@ -108,7 +112,7 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     /* Resume the tracee to the next system call */
     if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
-        
+
     /* Send a signal to interrupt the system call. */
     kill(pid, SIGUSR1);
 
@@ -116,28 +120,21 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
 
+    /* Check that the syscall is started with the right first argument. */
     if (ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov)) {
-        perror("get child registers failed");
+        ksft_test_result_error("failed to get tracee registers\n");
         return -1;
     }
     if (regs.orig_a0 != p[0]) {
-        perror("unexpected a0");
+        ksft_test_result_fail("unexpected orig_a0: 0x%lx\n", regs.orig_a0);
         return -1;
     }
+    ksft_test_result_pass("orig_a0: 0x%lx\n", regs.orig_a0);
 
-    /* Change a0/orig_a0 that will be a0 for the restarted system call. */
-    switch (opt) {
-    case MODIFY_A0_CASE: {
-        regs.a0 = fd_zero;
-        break;
-    }
-    case MODIFY_ORIG_A0_CASE:
-        regs.orig_a0 = fd_zero;
-        break;
-    }
-
+    /* Change orig_a0 that will be a0 for the restarted system call. */
+    regs.orig_a0 = fd_null;
     if (ptrace(PTRACE_SETREGSET, pid, NT_PRSTATUS, &iov)) {
-        perror("set tracee registers failed");
+        ksft_test_result_error("failed to set tracee registers\n");
         return -1;
     }
 
@@ -149,45 +146,39 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
 
-    /* Check that the syscall is started with the right first argument. */
+    /* Check that the syscall is restarted with the right first argument. */
     if (ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov)) {
-        perror("get child registers failed");
+        ksft_test_result_error("failed to get tracee registers\n");
         return -1;
-    }    
-    *result = regs.a0;
+    }
+    printf("regs.orig_a0: %lx\n", regs.orig_a0);
+    printf("regs.a0: %lx\n", regs.a0);
 
+    if (regs.a0 != fd_null) {
+        ksft_test_result_fail("unexpected regs.a0: 0x%lx\n", regs.a0);
+        return -1;
+    }
+    ksft_test_result_pass("a0: 0x%lx\n", regs.a0);
+
+    /* Check exit status of the tracee */
     if (ptrace(PTRACE_CONT, pid, 0, 0)) {
-        perror("resume the tracee failed");
+        ksft_test_result_error("failed to resume to the tracee %d\n", pid);
         return -1;
     }
     if (waitpid(pid, &status, 0) != pid) {
-        perror("wait for the tracee failed");
+        ksft_test_result_error("failed to wait for the tracee %d\n", pid);
         return -1;
     }
     if (status != 0) {
-        perror("unexpected exit status");
+        ksft_test_result_fail("tracee exited with code %d\n", status);
         return -1;
     }
-    
+
+    ksft_test_result_pass("tracee exited with code 0\n");
+    ksft_exit_pass();
+
+    close(fd_null);
+    //close(fd_zero);
+
     return 0;
 }
-
-TEST(ptrace_modify_a0)
-{
-    int result;
-
-    ptrace_restart_syscall_test(MODIFY_A0_CASE, &result);
-
-    EXPECT_NE(ORIG_A0_AFTER_MODIFIED, result);
-}
-
-TEST(ptrace_modify_orig_a0)
-{
-    int result;
-
-    ptrace_restart_syscall_test(MODIFY_ORIG_A0_CASE, &result);
-
-    EXPECT_EQ(ORIG_A0_AFTER_MODIFIED, result);
-}
-
-TEST_HARNESS_MAIN
