@@ -24,52 +24,39 @@
 #define MODIFY_A0_CASE              0x01
 #define MODIFY_ORIG_A0_CASE         0x02
 
-static inline int ptrace_and_wait(pid_t pid, int flag, int sig)
+#define log_err(fmt, ...) do {                  \
+    char buffer[256];                           \
+    snprintf(buffer, sizeof(buffer),            \
+            "%s:%d: " fmt ": %m\n",               \
+            __func__, __LINE__, __VA_ARGS__);   \
+    perror(buffer);                             \
+} while (0)
+
+static inline int resume_and_wait_child(pid_t pid, int flag, int sig)
 {
     int status;
 
-    if (ptrace(flag, pid, 0, 0)) {
-        perror("resume the tracee failed");
-        return -1;
-    }
+    if (ptrace(flag, pid, 0, 0))
+        log_err("failed to resume the tracee %d", pid);
 
     if (waitpid(pid, &status, 0) != pid) {
         perror("wait for the tracee failed");
         return -1;
     }
-    
-    /*
-    if (!WIFSTOPPED(status) || WSTOPSIG(status) != sig) {
-        perror("unexpected status");
-        return -1;
-    }
-    */
 
     return 0;
 }
-
-/*
-static int tracee(int fd)
-{
-    char c;
-    
-    if (read(fd, &c, 1) != 1)
-        return 1;
-
-    return 0;
-}
-*/
 
 static int ptrace_restart_syscall_test(int opt, int *result)
 {
+    int status;
+    int p[2], fd_zero;
+    pid_t pid;
     struct user_regs_struct regs;
     struct iovec iov = {
         .iov_base = &regs,
         .iov_len = sizeof(regs),
     };
-    pid_t pid;
-    int p[2], fd_zero;
-    int status;
 
     if (pipe(p)) {
         perror("create a pipe failed");
@@ -85,13 +72,13 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     pid = fork();
     if (pid == 0) {
         char c;
-
-        if (ptrace(PTRACE_TRACEME, 0, NULL, NULL)) {
+        
+        if (ptrace(PTRACE_TRACEME, 0, 0, 0)) {
             perror("request for tracer to trace me failed");
             return -1;
-        }    
+        }
         kill(getpid(), SIGSTOP);
-    
+        
         if (read(p[0], &c, 1) != 1)
             return 1;
 
@@ -99,24 +86,29 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     } else if (pid < 0)
         return 1;
 
+    /*
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0)) {
+        ksft_test_result_error("failed to attach to the tracee %d\n", pid);
+        return -1;
+    }
+    */
+
+    printf("i am coming !!!\n");
     if (waitpid(pid, &status, 0) != pid) {
         ksft_test_result_error("failed to wait for the tracee %d\n", pid);
         return -1;
     }
 
-    /* Skip SIGSTOP */
-    if (ptrace_and_wait(pid, PTRACE_CONT, SIGSTOP))
-        return 1;
 
     /* Resume the tracee to the next system call */
-    if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
+    if (resume_and_wait_child(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
-        
+
     /* Send a signal to interrupt the system call. */
     kill(pid, SIGUSR1);
 
     /* Stop on syscall-exit. */
-    if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
+    if (resume_and_wait_child(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
 
     if (ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov)) {
@@ -151,11 +143,11 @@ static int ptrace_restart_syscall_test(int opt, int *result)
     }
 
     /* Trap the signal and skip it. */
-    if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGUSR1))
+    if (resume_and_wait_child(pid, PTRACE_SYSCALL, SIGUSR1))
         return 1;
 
     /* Trap the restarted system call. */
-    if (ptrace_and_wait(pid, PTRACE_SYSCALL, SIGTRAP))
+    if (resume_and_wait_child(pid, PTRACE_SYSCALL, SIGTRAP))
         return 1;
 
     /* Check that the syscall is started with the right first argument. */
