@@ -156,6 +156,53 @@ void kvm_riscv_vcpu_sbi_system_reset(struct kvm_vcpu *vcpu,
 	run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
 }
 
+// kvm_sbi_hsm_vcpu_start
+void kvm_riscv_vcpu_sbi_system_suspend(struct kvm_vcpu *vcpu,
+				     struct kvm_run *run,
+				     unsigned long addr,
+					 unsigned long opaque)
+{
+	
+	struct kvm_cpu_context *reset_cntx;
+	struct kvm_vcpu_csr *reset_csr;
+	struct kvm_cpu_context *cp = &vcpu->arch.guest_context;
+	struct kvm_vcpu *target_vcpu;
+	unsigned long target_vcpuid = cp->a0;
+	int ret = 0;
+
+	target_vcpu = kvm_get_vcpu_by_id(vcpu->kvm, target_vcpuid);
+
+	spin_lock(&target_vcpu->arch.mp_state_lock);
+
+	/* for_each_vcpu: check enter criteria */
+	// TODO
+	if (!kvm_riscv_vcpu_stopped(target_vcpu)) {
+		ret = SBI_ERR_ALREADY_AVAILABLE;
+		goto out;
+	}
+
+	spin_lock(&target_vcpu->arch.reset_cntx_lock);
+	reset_cntx = &target_vcpu->arch.guest_reset_context;
+	/* resume address */
+	reset_cntx->sepc = addr;
+	/* target vcpu id to start */
+	reset_cntx->a0 = target_vcpuid;
+	/* XLEN-bit value from guest */
+	reset_cntx->a1 = opaque;
+	spin_unlock(&target_vcpu->arch.reset_cntx_lock);
+
+	// ??? need to reset_cntx_lock?
+	reset_csr = &target_vcpu->arch.guest_reset_csr;
+	reset_csr->vsatp = 0;
+	reset_csr->vsstatus &= ~SR_SIE;
+
+	kvm_make_request(KVM_REQ_VCPU_RESET, target_vcpu);
+
+	kvm_riscv_vcpu_wfi(vcpu);
+out:
+	spin_unlock(&target_vcpu->arch.mp_state_lock);
+}
+
 int kvm_riscv_vcpu_sbi_return(struct kvm_vcpu *vcpu, struct kvm_run *run)
 {
 	struct kvm_cpu_context *cp = &vcpu->arch.guest_context;
