@@ -105,6 +105,8 @@ static int __init riscv_kvm_init(void)
 		kvm_info("AIA available with %d guest external interrupts\n",
 			 kvm_riscv_aia_nr_hgei);
 
+	kvm_register_perf_callbacks(NULL);
+
 	rc = kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
 	if (rc) {
 		kvm_riscv_aia_exit();
@@ -118,6 +120,7 @@ module_init(riscv_kvm_init);
 static void __exit riscv_kvm_exit(void)
 {
 	kvm_riscv_aia_exit();
+	kvm_unregister_perf_callbacks();
 
 	kvm_exit();
 }

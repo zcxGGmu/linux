@@ -222,6 +222,20 @@ bool kvm_arch_vcpu_in_kernel(struct kvm_vcpu *vcpu)
 	return (vcpu->arch.guest_context.sstatus & SR_SPP) ? true : false;
 }
 
+#ifdef CONFIG_GUEST_PERF_EVENTS
+//#define vcpu_gp_regs(v)		(&(v)->arch.ctxt.regs)
+# define vcpu_guest_ctx(v) (&(v)->arch.guest_context)
+static __always_inline unsigned long *kvm_riscv_vcpu_pc(const struct kvm_vcpu *vcpu)
+{
+	return (unsigned long *)&vcpu_guest_ctx(vcpu)->sepc;
+}
+
+unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu)
+{
+	return *kvm_riscv_vcpu_pc(vcpu);
+}
+#endif
+
 vm_fault_t kvm_arch_vcpu_fault(struct kvm_vcpu *vcpu, struct vm_fault *vmf)
 {
 	return VM_FAULT_SIGBUS;
